@@ -98,30 +98,36 @@ class MS5837(object):
             return False
         
         # Request D1 conversion (pressure)
-        self._bus.write_byte(self._MS5837_ADDR, self._MS5837_CONVERT_D1_256 + 2*oversampling)
-    
-        # Maximum conversion time increases linearly with oversampling
-        # max time (seconds) ~= 2.2e-6(x) where x = OSR = (2^8, 2^9, ..., 2^13)
-        # We use 2.5e-6 for some overhead
-        sleep(2.5e-6 * 2**(8+oversampling))
+        try:
+            self._bus.write_byte(self._MS5837_ADDR, self._MS5837_CONVERT_D1_256 + 2*oversampling)
+        except:
+            print("Could not read from device. Will try again")
+            return False
+        else:
+            # Maximum conversion time increases linearly with oversampling
+            # max time (seconds) ~= 2.2e-6(x) where x = OSR = (2^8, 2^9, ..., 2^13)
+            # We use 2.5e-6 for some overhead
+            sleep(2.5e-6 * 2**(8+oversampling))
+            
+            d = self._bus.read_i2c_block_data(self._MS5837_ADDR, self._MS5837_ADC_READ, 3)
+            self._D1 = d[0] << 16 | d[1] << 8 | d[2]
+            
+            # Request D2 conversion (temperature)
+            self._bus.write_byte(self._MS5837_ADDR, self._MS5837_CONVERT_D2_256 + 2*oversampling)
         
-        d = self._bus.read_i2c_block_data(self._MS5837_ADDR, self._MS5837_ADC_READ, 3)
-        self._D1 = d[0] << 16 | d[1] << 8 | d[2]
-        
-        # Request D2 conversion (temperature)
-        self._bus.write_byte(self._MS5837_ADDR, self._MS5837_CONVERT_D2_256 + 2*oversampling)
+            # As above
+            sleep(2.5e-6 * 2**(8+oversampling))
     
-        # As above
-        sleep(2.5e-6 * 2**(8+oversampling))
- 
-        d = self._bus.read_i2c_block_data(self._MS5837_ADDR, self._MS5837_ADC_READ, 3)
-        self._D2 = d[0] << 16 | d[1] << 8 | d[2]
+            d = self._bus.read_i2c_block_data(self._MS5837_ADDR, self._MS5837_ADC_READ, 3)
+            self._D2 = d[0] << 16 | d[1] << 8 | d[2]
 
-        # Calculate compensated pressure and temperature
-        # using raw ADC values and internal calibration
-        self._calculate()
+            # Calculate compensated pressure and temperature
+            # using raw ADC values and internal calibration
+            self._calculate()
+
+            return True
         
-        return True
+        return False
     
     def setFluidDensity(self, denisty):
         self._fluidDensity = denisty
